@@ -13,3 +13,36 @@ datasource db {
   provider = "postgresql"
 }
 
+//write the schema 
+model User{
+  id              String          @id @default(uuid())
+  email           String          @unique
+  username        String          @unique
+  password        String
+  name            String
+  fund            Float         
+  deleted         Boolean     
+  existingTrades  ExistingTrade[]
+}
+
+model ExistingTrade{
+  id             String           @id @default(uuid())
+  openPrice      Float
+  closePrice     Float            
+  leverage       Float
+  pnl            Float
+  asset          Asset            @relation(fields: [assetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assetId        String
+  liquidated     Boolean
+  user           User             @relation(fields: [userId], references: [id])
+  userId         String
+}
+
+model Asset{
+  id              String           @id @default(uuid())
+  symbol          String
+  imageUrl        String
+  name            String
+  decimals        Int
+  ExistingTrades  ExistingTrade[]
+}
