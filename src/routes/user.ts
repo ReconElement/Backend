@@ -88,7 +88,13 @@ user.post("/login",async (req: express.Request, res: express.Response)=>{
                     message: "Unauthorized access, please provide the correct password"
                 });
                 return;
-            }else{
+            }else if(user.deleted==true){
+                res.status(410).json({
+                    message: "Requested user does not exist anymore"
+                });
+                return;
+            } 
+            else{
                 const token = jwt.sign({id: user.id}, process.env.SECRET_KEY, {expiresIn: "1hr"});
                 res.setHeader("Set-Cookie",
                     cookie.stringifySetCookie({
@@ -103,6 +109,7 @@ user.post("/login",async (req: express.Request, res: express.Response)=>{
                 res.status(302).json({
                     message: "User found and authenticated"
                 });
+                return;
             }
         }
     }catch(e){
