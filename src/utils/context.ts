@@ -1,5 +1,4 @@
 import express from 'express';
-import {prisma} from '../lib/prisma.js';
 import jwt from 'jsonwebtoken';
 export default async function Context(req: express.Request):Promise<string>{
     const token = req.cookies["JWT_bearer"];
@@ -9,4 +8,3 @@ export default async function Context(req: express.Request):Promise<string>{
     }
     return "null";
 };
-

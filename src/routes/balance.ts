@@ -1,6 +1,6 @@
 import express from 'express';
 import Context from '../utils/context.js';
-import {prisma} from '../lib/prisma.js';
+import prisma from '../lib/prisma.js';
 const balance = express.Router();
 //it just shows the initial balance of the user, by fetching it from the db
 balance.get("/", async (req: express.Request, res: express.Response)=>{

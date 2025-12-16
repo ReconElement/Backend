@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import user from './routes/user.js';
 import auth from './middlewares/auth.js';
 import balance from './routes/balance.js';
+import trade from './routes/trade.js';
 const app = express();
 const PORT = process.env.PORT || 4000;
 dotenv.config();
@@ -23,6 +24,7 @@ app.use('/api/v1/', user);
 app.use(auth);
 
 app.use('/api/v1/balance', balance);
+app.use('/api/v1/trade',trade);
 
 app.get("/secure",async (req, res)=>{
     res.status(200).json({
