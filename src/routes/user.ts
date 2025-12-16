@@ -3,8 +3,8 @@ import prisma from '../lib/prisma.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import cookie from 'cookie';
-import signupZodValidation from '../typesAndZod/signupZod.js';
-import loginZodValidation from '../typesAndZod/loginZod.js';
+import signupZodValidation from '../zod-validation/signupZod.js';
+import loginZodValidation from '../zod-validation/loginZod.js';
 const user = express.Router();
 
 user.post('/signup', async (req: express.Request, res: express.Response)=>{

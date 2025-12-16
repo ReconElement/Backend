@@ -4,6 +4,7 @@ const tradeApiZodValidation = z.object({
     type: z.literal(["long","short"]),
     //margin is not provided by the order api 
     leverage: z.literal([2,5,10,25,100]),
+    quantity: z.number(),
     slippage: z.number(), //in bips aka every number here is 0.01%
 });
 

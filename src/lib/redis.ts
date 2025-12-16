@@ -12,6 +12,7 @@ try{
     //since it's a fatal error for this backend
     process.exit(1);
 }
-
 export default redisClient;
+
+
 

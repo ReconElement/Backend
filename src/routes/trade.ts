@@ -2,16 +2,9 @@ import express from 'express';
 import Context from '../utils/context.js';
 import prisma from '../lib/prisma.js';
 import redisClient from '../lib/redis.js';
-import tradeApiZodValidation from '../typesAndZod/tradeApiZod.js';
+import tradeApiZodValidation from '../zod-validation/tradeApiZod.js';
+import type { Order } from '../types.js';
 const trade = express.Router();
-
-export type Order = {
-    asset: "BTC" | "ETH" | "SOL",
-    type: "long" | "short",
-    margin: number,
-    leverage: number,
-    slippage: number
-};
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
     try{
@@ -77,7 +70,7 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
             return;
         }
         if(user.fund){
-            order.margin = user.fund;
+            order.margin = user.fund*100*100; //apparently decimal is fixed at 4, hence multiplied with 100*100
         };
         switch(leverage){
             case 2:
@@ -99,9 +92,29 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                 return;
         };
         order.slippage = slippage;
-        res.status(200).json({
-            message: order
+        //send the purchase order to engine 
+        const sendOverStream = await redisClient.xAdd("stream",'*',{
+            data: JSON.stringify(order)
         });
+        const acknowledgment = async function(sendOverStream: string){
+            const item = await redisClient.xRead({
+                id: '+',
+                key: "ackStream"
+            },{BLOCK: 0});
+            if(item){
+                console.log(item);
+               const parse = tradeApiZodValidation.safeParse(item);
+               console.log(parse);
+            }
+            return item;
+        };
+        const ack = await acknowledgment(sendOverStream);
+        if(ack){
+            res.status(200).json({
+                message: "Order placed successfully"
+            });
+            return;
+        }
     }catch(e){
         console.log(`Error in trade/create route: ${e}`);
         res.status(500).json({
