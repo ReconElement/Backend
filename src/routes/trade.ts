@@ -3,7 +3,8 @@ import Context from '../utils/context.js';
 import prisma from '../lib/prisma.js';
 import redisClient from '../lib/redis.js';
 import tradeApiZodValidation from '../zod-validation/tradeApiZod.js';
-import type { Order } from '../types.js';
+import tradeValidationZod from '../zod-validation/tradeValidationZod.js';
+import type { Order, tradeObjectType } from '../types.js';
 const trade = express.Router();
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
@@ -16,14 +17,15 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
             });
             return;
         }
-        const {asset, type, leverage, slippage} = tradeApiZodValidation.parse(req.body);
+        const {asset, type, leverage, slippage, quantity} = tradeApiZodValidation.parse(req.body);
         //default trade order object init
         const order: Order = {
             asset: "BTC",
             type: "long",
             margin: 0,
             leverage: 0,
-            slippage: 0
+            slippage: 0,
+            quantity: 0
         };
         switch(asset){
             case "BTC":
@@ -92,27 +94,46 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                 return;
         };
         order.slippage = slippage;
+        order.quantity = quantity;
+        console.log(order);
         //send the purchase order to engine 
         const sendOverStream = await redisClient.xAdd("stream",'*',{
             data: JSON.stringify(order)
         });
-        const acknowledgment = async function(sendOverStream: string){
+        const acknowledgement = async function(sendOverStream: string){
             const item = await redisClient.xRead({
                 id: '+',
                 key: "ackStream"
             },{BLOCK: 0});
-            if(item){
-                console.log(item);
-               const parse = tradeApiZodValidation.safeParse(item);
-               console.log(parse);
-            }
             return item;
         };
-        const ack = await acknowledgment(sendOverStream);
-        if(ack){
+        let ack = async function(): Promise<boolean>{
+            return new Promise((resolve, reject)=>{
+                setTimeout(async ()=>{
+                    let val = await acknowledgement(sendOverStream) as tradeObjectType;
+                    const parsed = tradeValidationZod.safeParse(val);
+                    if(parsed.success === true){
+                        const data = val[0].messages?.[0]?.message.data;
+                        if(data){
+                            const id = JSON.parse(data).recieved;
+                            console.log(JSON.parse(data)); //to get the data 
+                            if(id===sendOverStream){
+                                resolve(true);
+                            }
+                            reject();
+                        }
+                        reject();
+                    }
+                    reject();
+                },100)
+            })
+        };
+        
+        if(await ack()){
             res.status(200).json({
                 message: "Order placed successfully"
             });
+            
             return;
         }
     }catch(e){
