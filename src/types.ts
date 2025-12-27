@@ -30,4 +30,24 @@ export type tradeObjectType = [
     }
 ];
 
+export type TradeRecievedType = {
+    asset: string,
+    price: number,
+    leverage: number,
+    slippage: number,
+    quantityPurchased: number,
+    balance: number,
+    recieved: string,
+    type: "short" | "long"
+};
 
+export type responseArrayOfActiveTradeType = {
+    id: string,
+    openPrice: number,
+    closePrice: number,
+    leverage: number,
+    pnl: number,
+    assetId: number,
+    liquidated: boolean,
+    userId: string
+}[];

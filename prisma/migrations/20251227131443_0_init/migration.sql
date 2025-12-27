@@ -1,6 +1,3 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -21,7 +18,7 @@ CREATE TABLE "ExistingTrade" (
     "closePrice" DOUBLE PRECISION NOT NULL,
     "leverage" DOUBLE PRECISION NOT NULL,
     "pnl" DOUBLE PRECISION NOT NULL,
-    "assetId" TEXT NOT NULL,
+    "assetId" INTEGER NOT NULL,
     "liquidated" BOOLEAN NOT NULL,
     "userId" TEXT NOT NULL,
 
@@ -30,7 +27,7 @@ CREATE TABLE "ExistingTrade" (
 
 -- CreateTable
 CREATE TABLE "Asset" (
-    "id" TEXT NOT NULL,
+    "id" INTEGER NOT NULL,
     "symbol" TEXT NOT NULL,
     "imageUrl" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -45,9 +42,11 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 -- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "Asset_id_key" ON "Asset"("id");
+
 -- AddForeignKey
 ALTER TABLE "ExistingTrade" ADD CONSTRAINT "ExistingTrade_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "Asset"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "ExistingTrade" ADD CONSTRAINT "ExistingTrade_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

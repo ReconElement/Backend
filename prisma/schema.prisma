@@ -32,14 +32,14 @@ model ExistingTrade{
   leverage       Float
   pnl            Float
   asset          Asset            @relation(fields: [assetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assetId        String
+  assetId        Int
   liquidated     Boolean
   user           User             @relation(fields: [userId], references: [id])
   userId         String
 }
-
+//an asset can have multiple existingTrades but an existingTrade cannot have multiple assets
 model Asset{
-  id              String           @id @default(uuid())
+  id              Int           @id @unique
   symbol          String
   imageUrl        String
   name            String

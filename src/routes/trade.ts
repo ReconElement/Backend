@@ -4,7 +4,8 @@ import prisma from '../lib/prisma.js';
 import redisClient from '../lib/redis.js';
 import tradeApiZodValidation from '../zod-validation/tradeApiZod.js';
 import tradeValidationZod from '../zod-validation/tradeValidationZod.js';
-import type { Order, tradeObjectType } from '../types.js';
+import type { Order, tradeObjectType, TradeRecievedType, responseArrayOfActiveTradeType } from '../types.js';
+import {assets} from '../seed/asset.js';
 const trade = express.Router();
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
@@ -95,7 +96,7 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
         };
         order.slippage = slippage;
         order.quantity = quantity;
-        console.log(order);
+        // console.log(order);
         //send the purchase order to engine 
         const sendOverStream = await redisClient.xAdd("stream",'*',{
             data: JSON.stringify(order)
@@ -107,7 +108,7 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
             },{BLOCK: 0});
             return item;
         };
-        let ack = async function(): Promise<boolean>{
+        let ack = async function(): Promise<TradeRecievedType>{
             return new Promise((resolve, reject)=>{
                 setTimeout(async ()=>{
                     let val = await acknowledgement(sendOverStream) as tradeObjectType;
@@ -118,7 +119,17 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                             const id = JSON.parse(data).recieved;
                             console.log(JSON.parse(data)); //to get the data 
                             if(id===sendOverStream){
-                                resolve(true);
+                                const tradeRecieved: TradeRecievedType = {
+                                    asset: JSON.parse(data).asset,
+                                    price: JSON.parse(data).price,
+                                    leverage: JSON.parse(data).leverage,
+                                    slippage: JSON.parse(data).slippage,
+                                    quantityPurchased: JSON.parse(data).quantityPurchased,
+                                    balance: JSON.parse(data).balance,
+                                    recieved: JSON.parse(data).recieved,
+                                    type: JSON.parse(data).type
+                                }
+                                resolve(tradeRecieved);
                             }
                             reject();
                         }
@@ -128,12 +139,27 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                 },100)
             })
         };
-        
-        if(await ack()){
+        const verify: TradeRecievedType = await ack();
+        if(verify){
+            const id = assets.filter((asset)=>asset.symbol===verify.asset).map((asset)=>asset.id)[0];
+            if(id){
+            const orderCreated = await prisma.existingTrade.create({
+                data: {
+                    openPrice: verify.price,
+                    closePrice: 0, //since it is the creation and not liquidation phase
+                    leverage: verify.leverage,
+                    pnl: 0, //since it has not been liquidated yet, it is 0
+                    //@ts-ignore
+                    liquidated: false, //since it's the creation bit, it's expected to be not liquidated yet, just created
+                    userId: user_id,
+                    assetId: id
+                }
+                });
+                orderCreated?console.log("Order created"):console.log("Order not created");
+            }
             res.status(200).json({
                 message: "Order placed successfully"
             });
-            
             return;
         }
     }catch(e){
@@ -143,5 +169,65 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
         });
     }
 });
+
+trade.get("/active-trades", async (req: express.Request, res: express.Response)=>{
+    try{
+        const user_id = await Context(req);
+        const activeTrades = await prisma.existingTrade.findMany({
+            where: {
+                userId: user_id
+            }
+        });
+        // console.log(activeTrades);
+        
+        const responseArrayOfActiveTrades: responseArrayOfActiveTradeType = activeTrades.filter((item)=>item.liquidated===false).map((item)=>item);
+        console.log(responseArrayOfActiveTrades);
+        res.status(200).json({
+            message: responseArrayOfActiveTrades
+        });
+    }catch(e){
+        console.log(`Error in active-trades route: ${e}`);
+        res.status(500).json({
+            message: "Internal Server Error"
+        });
+    }
+});
+
+trade.get("/trades", async (req: express.Request, res: express.Response)=>{
+    try{
+        const user_id = await Context(req);
+        const trades = await prisma.existingTrade.findMany({
+            where: {
+                userId: user_id
+            }
+        });
+        const responseArrayOfTrades: responseArrayOfActiveTradeType = trades.map((item)=>item);
+        res.status(200).json({
+            message: responseArrayOfTrades
+        });
+    }catch(e){
+        console.log(`Error in trades route: ${e}`);
+        res.status(500).json({
+            message: "Internal Server Error"
+        });
+    }
+});
+
+trade.post("/liquidate-asset", async (req: express.Request, res: express.Response)=>{
+    try{
+        const user_id = await Context(req);
+        /**
+         * the body should be like 
+         * {id: "{uuid of trade}"}
+         */
+        const {id} = req.body;
+        
+    }catch(e){
+        console.log(`Error in liquidate-asset route: ${e}`);
+        res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+})
 
 export default trade;

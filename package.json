@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx tsc -b && node ./dist/src/index.js"
+    "dev": "npx tsc -b && node ./dist/src/index.js",
+    "seed": "npx tsc -b && node ./dist/src/seed/asset.js"
   },
   "repository": {
     "type": "git",
@@ -21,7 +22,7 @@
   "homepage": "https://github.com/ReconElement/Backend#readme",
   "dependencies": {
     "@prisma/adapter-pg": "^7.1.0",
-    "@prisma/client": "^7.1.0",
+    "@prisma/client": "^7.2.0",
     "@types/bcrypt": "^6.0.0",
     "@types/body-parser": "^1.19.6",
     "@types/cookie": "^0.6.0",
@@ -43,6 +44,6 @@
   "devDependencies": {
     "@types/node": "^25.0.1",
     "@types/pg": "^8.16.0",
-    "prisma": "^7.1.0"
+    "prisma": "^7.2.0"
   }
 }
