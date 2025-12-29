@@ -4,8 +4,10 @@ import prisma from '../lib/prisma.js';
 import redisClient from '../lib/redis.js';
 import tradeApiZodValidation from '../zod-validation/tradeApiZod.js';
 import tradeValidationZod from '../zod-validation/tradeValidationZod.js';
+import liquidateAssetZod from '../zod-validation/liquidateAssetZod.js';
 import type { Order, tradeObjectType, TradeRecievedType, responseArrayOfActiveTradeType } from '../types.js';
 import {assets} from '../seed/asset.js';
+import type { ExistingTrade } from '../../generated/prisma/browser.js';
 const trade = express.Router();
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
@@ -76,6 +78,9 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
             order.margin = user.fund*100*100; //apparently decimal is fixed at 4, hence multiplied with 100*100
         };
         switch(leverage){
+            case 1:
+                order.leverage = 1;
+                break;
             case 2:
                 order.leverage = 2;
                 break;
@@ -121,6 +126,7 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                             if(id===sendOverStream){
                                 const tradeRecieved: TradeRecievedType = {
                                     asset: JSON.parse(data).asset,
+                                    assetPrice: JSON.parse(data).assetPrice,
                                     price: JSON.parse(data).price,
                                     leverage: JSON.parse(data).leverage,
                                     slippage: JSON.parse(data).slippage,
@@ -130,6 +136,8 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
                                     type: JSON.parse(data).type
                                 }
                                 resolve(tradeRecieved);
+                                console.log(`Trade Recieved as acknowledgment`);
+                                console.log(tradeRecieved);
                             }
                             reject();
                         }
@@ -142,20 +150,32 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
         const verify: TradeRecievedType = await ack();
         if(verify){
             const id = assets.filter((asset)=>asset.symbol===verify.asset).map((asset)=>asset.id)[0];
-            if(id){
-            const orderCreated = await prisma.existingTrade.create({
-                data: {
-                    openPrice: verify.price,
-                    closePrice: 0, //since it is the creation and not liquidation phase
-                    leverage: verify.leverage,
-                    pnl: 0, //since it has not been liquidated yet, it is 0
-                    //@ts-ignore
-                    liquidated: false, //since it's the creation bit, it's expected to be not liquidated yet, just created
-                    userId: user_id,
-                    assetId: id
-                }
+            if (id) {
+                //update the user fund
+                const updateUserFund = await prisma.user.update({
+                    where: {
+                        id: user_id,
+                    },
+                    data: {
+                        fund: verify.balance
+                    }
                 });
-                orderCreated?console.log("Order created"):console.log("Order not created");
+                const orderCreated = await prisma.existingTrade.create({
+                    data: {
+                        openPrice: verify.price,
+                        assetPrice: verify.assetPrice,
+                        closePrice: 0, //since it is the creation and not liquidation phase
+                        leverage: verify.leverage,
+                        pnl: 0, //since it has not been liquidated yet, it is 0
+                        //@ts-ignore
+                        liquidated: false, //since it's the creation bit, it's expected to be not liquidated yet, just created
+                        userId: user_id,
+                        assetId: id,
+                        quantity: verify.quantityPurchased,
+                        type: verify.type
+                    }
+                });
+                orderCreated ? console.log("Order created") : console.log("Order not created");
             }
             res.status(200).json({
                 message: "Order placed successfully"
@@ -216,12 +236,166 @@ trade.get("/trades", async (req: express.Request, res: express.Response)=>{
 trade.post("/liquidate-asset", async (req: express.Request, res: express.Response)=>{
     try{
         const user_id = await Context(req);
-        /**
-         * the body should be like 
-         * {id: "{uuid of trade}"}
-         */
-        const {id} = req.body;
-        
+        const parse = liquidateAssetZod.safeParse(req.body);
+        if(!parse.success){
+            res.status(404).json({
+                message: "Error occurred during API validation, please provide the input id of the order correctly"
+            });
+        }
+        const {id, quantity} = liquidateAssetZod.parse(req.body);
+        console.log(id);
+        //get the order and run various checks
+        const existingTrade = await prisma.existingTrade.findUnique({
+            where: {
+                id: id
+            }
+        });
+        console.log(existingTrade);
+        if(existingTrade && existingTrade.liquidated===false){
+            //quantity check
+            if(existingTrade.quantity<quantity){
+                res.status(400).json({
+                    message: "Invalid request, the quantity provided to be sold exceeds the purchased quantity with this order id"
+                })
+                return;
+            }
+            //liquidation check
+            if(existingTrade.liquidated){
+                res.status(400).json({
+                    message: "Invalid request, the trade with this order id has already been liquidated"
+                });
+                return;
+            }
+            //get the asset symbol based on the assetId 
+            const order: Order = {
+                asset: "BTC",
+                type: "long",
+                margin: 0,
+                leverage: 0,
+                slippage: 0,
+                quantity: 0
+            };
+            const assetSymbol = assets.filter((asset)=>asset.id===existingTrade.assetId).map((asset)=>asset.symbol)[0];
+            if (assetSymbol) {
+                switch(assetSymbol){
+                    case "BTC":
+                        order.asset = "BTC";
+                        break;
+                    case "ETH":
+                        order.asset = "ETH";
+                        break;
+                    case "SOL":
+                        order.asset = "SOL";
+                }
+            }
+            order.type = existingTrade.type;
+            order.margin = 0; //this differentiates a sell order from a buy/purchase order
+            order.leverage = existingTrade.leverage;
+            order.slippage = 1; //slippage is set as 1 blip by default
+            order.quantity = quantity//quantity has to be defined by user and updated on db when the trade is recieved
+            console.log(`liquidate-asset order ========= liquidate-asset order`);
+            console.log(order);
+            //update db only when you recieve the confirmation
+            const sendOverStream = await redisClient.xAdd("stream","*",{
+                data: JSON.stringify(order)
+            });
+            const acknowledgement = async (sendOverStream: string)=>{
+                const item = redisClient.xRead({
+                    id: "+",
+                    key: "ackStream"
+                },{BLOCK: 0});
+                return item;
+            };
+            const ack = async (): Promise<TradeRecievedType> => {
+                return new Promise((resolve, reject) => {
+                    setTimeout(async () => {
+                        let val = await acknowledgement(sendOverStream) as tradeObjectType;
+                        const parsed = tradeValidationZod.safeParse(val);
+                        if (parsed.success === true) {
+                            const data = val[0].messages?.[0]?.message.data;
+                            if (data) {
+                                const id = JSON.parse(data).recieved;
+                                console.log(JSON.parse(data)); //to get the data 
+                                if (id === sendOverStream) {
+                                    const tradeRecieved: TradeRecievedType = {
+                                        asset: JSON.parse(data).asset,
+                                        assetPrice: JSON.parse(data).assetPrice,
+                                        price: JSON.parse(data).price,
+                                        leverage: JSON.parse(data).leverage,
+                                        slippage: JSON.parse(data).slippage,
+                                        quantityPurchased: JSON.parse(data).quantityPurchased,
+                                        balance: JSON.parse(data).balance,
+                                        recieved: JSON.parse(data).recieved,
+                                        type: JSON.parse(data).type
+                                    }
+                                    // const tradeRecieved: TradeRecievedType = JSON.parse(data);
+                                    resolve(tradeRecieved);
+                                }
+                                reject();
+                            }
+                            reject();
+                        }
+                        reject();
+                    }, 100)
+                });
+            }
+            const verify: TradeRecievedType = await ack();
+            console.log(verify);
+            if(verify){
+                //db modifications in ExistingTrade table 
+                const pnlCalculation = function(verify: TradeRecievedType, existingTrade: ExistingTrade): number{
+                    let pnl: number = 0;
+                    if(existingTrade.type==="long"){
+                        pnl = verify.balance-existingTrade.assetPrice;
+                        //need an asset price col to store asset price at the time of purchase in db schema
+
+                    };
+                    if(existingTrade.type==="short"){
+                        pnl = -1*(verify.balance-existingTrade.assetPrice);
+                    }
+                    return pnl;
+                };
+                let profitOrLoss = pnlCalculation(verify, existingTrade);
+                const tradeModifications = await prisma.existingTrade.update({
+                    where: {id: id},
+                    data: {
+                        // closePrice: verify.balance, //since it's an aggregate price and not the particular price of the single asset
+                        closePrice: {
+                            increment: verify.balance,
+                        },
+                        leverage: verify.leverage,
+                        pnl: existingTrade.pnl + profitOrLoss,
+                        quantity: existingTrade.quantity-verify.quantityPurchased,
+                        liquidated: existingTrade.quantity-verify.quantityPurchased===0?true:false,
+                    }
+                });
+                //db modifications in User table
+                const userModifications = await prisma.user.update({
+                    where: {id: user_id},
+                    data: {
+                        fund: {
+                            increment: verify.balance
+                        }
+                    }
+                });
+
+                /**
+                 * Test with increasing quantity, then leverage and then by different coins 
+                 * 
+                 */
+                if (userModifications && tradeModifications) {
+                    res.status(200).json({
+                        message: "Trade has been successfully liquidated"
+                    });
+                    return;
+                }
+            }
+        }else{
+            res.status(404).json({
+                message: "No trades found with the provided id"
+            });
+            return;
+        }
     }catch(e){
         console.log(`Error in liquidate-asset route: ${e}`);
         res.status(500).json({

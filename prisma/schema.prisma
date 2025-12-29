@@ -30,10 +30,13 @@ model ExistingTrade{
   openPrice      Float
   closePrice     Float            
   leverage       Float
+  assetPrice     Float                                 //Stores the price of the individual asset at the time of buying
   pnl            Float
+  quantity       Float
+  type           TradeType        @default(long)
   asset          Asset            @relation(fields: [assetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   assetId        Int
-  liquidated     Boolean
+  liquidated     Boolean          
   user           User             @relation(fields: [userId], references: [id])
   userId         String
 }
@@ -45,4 +48,9 @@ model Asset{
   name            String
   decimals        Int
   ExistingTrades  ExistingTrade[]
+}
+
+enum TradeType {
+  long
+  short 
 }

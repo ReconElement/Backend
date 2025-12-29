@@ -7,6 +7,11 @@ export type Order = {
     quantity: number
 };
 
+enum asset {
+    BTC = 1,
+    ETH = 2,
+    SOL = 3
+}
 // export type tradeObjectType = {
 //     name: string,
 //     messages: {
@@ -32,6 +37,7 @@ export type tradeObjectType = [
 
 export type TradeRecievedType = {
     asset: string,
+    assetPrice: number,
     price: number,
     leverage: number,
     slippage: number,
