@@ -366,15 +366,13 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                     where: {id: user_id},
                     data: {
                         fund: {
-                            increment: verify.balance //increment with profits recieved as "balance"
-                            /**
-                             * Work on it @ReconELement
-                             */
+                            increment: verify.balance
                         }
                     }
                 });
                 //set the pnl after final resolution
                 if(tradeModifications.liquidated){
+                    //gives profitnloss on liquidatoion
                     const profitLossUpdate = await prisma.existingTrade.update({
                         where: {
                             id: tradeModifications.id
@@ -383,24 +381,24 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                             pnl: (tradeModifications.closePrice - tradeModifications.openPrice)
                         }
                     });
-                    //user gets his whole amount back
-                    // if(profitLossUpdate){
-                    //     await prisma.user.update({
-                    //         where: { id: user_id },
-                    //         data: {
-                    //             fund: {
-                    //                 increment: (existingTrade.assetPrice*existingTrade.quantity)
-                    //             }
-                    //         }
-                    //     });
-                    // }
+                    //addition of profit to final user balance
+                    if(profitLossUpdate){
+                        await prisma.user.update({
+                            where: {id: user_id},
+                            data: {
+                                fund: {
+                                    increment: profitLossUpdate.pnl
+                                }
+                            }
+                        })
+                    }
                 }
                 const balanceOfUserAfterSelling = await prisma.user.findUnique({
                     where: {id: user_id},
                     select: {fund: true}
                 });
                 console.log(`Total funds with user after this deal: $ ${balanceOfUserAfterSelling?.fund}`);
-                console.log(`Profit recieved in this run: ${verify.balance}`);
+                // console.log(`Profit recieved in this run: ${verify.balance}`);
                 /**
                  * Test with increasing quantity, then leverage and then by different coins 
                  * 
