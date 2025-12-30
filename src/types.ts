@@ -1,5 +1,6 @@
 export type Order = {
     asset: "BTC" | "ETH" | "SOL",
+    assetPrice: number,
     type: "long" | "short",
     margin: number,
     leverage: number,

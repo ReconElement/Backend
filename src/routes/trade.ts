@@ -8,6 +8,7 @@ import liquidateAssetZod from '../zod-validation/liquidateAssetZod.js';
 import type { Order, tradeObjectType, TradeRecievedType, responseArrayOfActiveTradeType } from '../types.js';
 import {assets} from '../seed/asset.js';
 import type { ExistingTrade } from '../../generated/prisma/browser.js';
+import { existsSync } from 'node:fs';
 const trade = express.Router();
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
@@ -24,6 +25,7 @@ trade.post("/create", async (req: express.Request, res: express.Response)=>{
         //default trade order object init
         const order: Order = {
             asset: "BTC",
+            assetPrice: 0,
             type: "long",
             margin: 0,
             leverage: 0,
@@ -269,6 +271,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             //get the asset symbol based on the assetId 
             const order: Order = {
                 asset: "BTC",
+                assetPrice: 0,
                 type: "long",
                 margin: 0,
                 leverage: 0,
@@ -291,6 +294,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             order.type = existingTrade.type;
             order.margin = 0; //this differentiates a sell order from a buy/purchase order
             order.leverage = existingTrade.leverage;
+            order.assetPrice = existingTrade.assetPrice;
             order.slippage = 1; //slippage is set as 1 blip by default
             order.quantity = quantity//quantity has to be defined by user and updated on db when the trade is recieved
             console.log(`liquidate-asset order ========= liquidate-asset order`);
@@ -342,48 +346,66 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             const verify: TradeRecievedType = await ack();
             console.log(verify);
             if(verify){
-                //db modifications in ExistingTrade table 
-                const pnlCalculation = function(verify: TradeRecievedType, existingTrade: ExistingTrade): number{
-                    let pnl: number = 0;
-                    if(existingTrade.type==="long"){
-                        pnl = verify.balance-existingTrade.assetPrice;
-                        //need an asset price col to store asset price at the time of purchase in db schema
-
-                    };
-                    if(existingTrade.type==="short"){
-                        pnl = -1*(verify.balance-existingTrade.assetPrice);
-                    }
-                    return pnl;
-                };
-                let profitOrLoss = pnlCalculation(verify, existingTrade);
+                //db modifications in ExistingTrade table
+                //profit or loss gets updated instead of incrementing
                 const tradeModifications = await prisma.existingTrade.update({
                     where: {id: id},
                     data: {
                         // closePrice: verify.balance, //since it's an aggregate price and not the particular price of the single asset
                         closePrice: {
-                            increment: verify.balance,
+                            increment: verify.balance*existingTrade.leverage,
                         },
                         leverage: verify.leverage,
-                        pnl: existingTrade.pnl + profitOrLoss,
+                        // pnl: existingTrade.pnl + profitOrLoss,
                         quantity: existingTrade.quantity-verify.quantityPurchased,
                         liquidated: existingTrade.quantity-verify.quantityPurchased===0?true:false,
                     }
                 });
-                //db modifications in User table
+                //user gets his cost
                 const userModifications = await prisma.user.update({
                     where: {id: user_id},
                     data: {
                         fund: {
-                            increment: verify.balance
+                            increment: verify.balance //increment with profits recieved as "balance"
+                            /**
+                             * Work on it @ReconELement
+                             */
                         }
                     }
                 });
-
+                //set the pnl after final resolution
+                if(tradeModifications.liquidated){
+                    const profitLossUpdate = await prisma.existingTrade.update({
+                        where: {
+                            id: tradeModifications.id
+                        },
+                        data: {
+                            pnl: (tradeModifications.closePrice - tradeModifications.openPrice)
+                        }
+                    });
+                    //user gets his whole amount back
+                    // if(profitLossUpdate){
+                    //     await prisma.user.update({
+                    //         where: { id: user_id },
+                    //         data: {
+                    //             fund: {
+                    //                 increment: (existingTrade.assetPrice*existingTrade.quantity)
+                    //             }
+                    //         }
+                    //     });
+                    // }
+                }
+                const balanceOfUserAfterSelling = await prisma.user.findUnique({
+                    where: {id: user_id},
+                    select: {fund: true}
+                });
+                console.log(`Total funds with user after this deal: $ ${balanceOfUserAfterSelling?.fund}`);
+                console.log(`Profit recieved in this run: ${verify.balance}`);
                 /**
                  * Test with increasing quantity, then leverage and then by different coins 
                  * 
                  */
-                if (userModifications && tradeModifications) {
+                if ( tradeModifications) {
                     res.status(200).json({
                         message: "Trade has been successfully liquidated"
                     });
