@@ -393,11 +393,11 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                         })
                     }
                 }
-                const balanceOfUserAfterSelling = await prisma.user.findUnique({
-                    where: {id: user_id},
-                    select: {fund: true}
-                });
-                console.log(`Total funds with user after this deal: $ ${balanceOfUserAfterSelling?.fund}`);
+                // const balanceOfUserAfterSelling = await prisma.user.findUnique({
+                //     where: {id: user_id},
+                //     select: {fund: true}
+                // });
+                // console.log(`Total funds with user after this deal: $ ${balanceOfUserAfterSelling?.fund}`);
                 // console.log(`Profit recieved in this run: ${verify.balance}`);
                 /**
                  * Test with increasing quantity, then leverage and then by different coins 

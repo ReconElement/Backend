@@ -106,7 +106,7 @@ user.post("/login",async (req: express.Request, res: express.Response)=>{
                         path: '/'
                     })
                 );
-                res.status(302).json({
+                res.status(200).json({
                     message: "User found and authenticated"
                 });
                 return;
@@ -119,6 +119,6 @@ user.post("/login",async (req: express.Request, res: express.Response)=>{
         console.log(`Error during login: ${e}`);
         return;
     }
-})
+});
 
 export default user;
