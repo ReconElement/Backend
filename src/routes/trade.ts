@@ -349,6 +349,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             if(verify){
                 //db modifications in ExistingTrade table
                 //profit or loss gets updated instead of incrementing
+                
                 const tradeModifications = await prisma.existingTrade.update({
                     where: {id: id},
                     data: {
@@ -367,19 +368,25 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                     where: {id: user_id},
                     data: {
                         fund: {
+                            // increment: verify.balance
                             increment: verify.balance
                         }
                     }
                 });
+                
                 //set the pnl after final resolution
                 if(tradeModifications.liquidated){
                     //gives profitnloss on liquidatoion
+                    let pnl = tradeModifications.closePrice-tradeModifications.openPrice;
+                    pnl = order.type==='long'?1*pnl:-1*pnl;
                     const profitLossUpdate = await prisma.existingTrade.update({
                         where: {
                             id: tradeModifications.id
                         },
                         data: {
-                            pnl: (tradeModifications.closePrice - tradeModifications.openPrice)
+                            // pnl: (tradeModifications.closePrice - tradeModifications.openPrice)
+                            pnl: pnl,
+                            quantity: order.quantity
                         }
                     });
                     //addition of profit to final user balance
