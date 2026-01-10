@@ -41,20 +41,6 @@ app.get('/',(req, res)=>{
 });
 
 app.use('/api/v1/', user);
-
-
-app.use(auth);
-
-app.use('/api/v1/balance', balance);
-app.use('/api/v1/trade',trade);
-app.use('/api/v1/profile',profile);
-
-app.get("/secure",async (req, res)=>{
-    res.status(200).json({
-        message: "Auth middleware works"
-    });
-});
-
 app.get('/api/v1/supportedAssets', async (req, res)=>{
     const assets = {
         assets: [{
@@ -73,6 +59,20 @@ app.get('/api/v1/supportedAssets', async (req, res)=>{
     }
     res.status(200).json(assets);
 });
+
+app.use(auth);
+
+app.use('/api/v1/balance', balance);
+app.use('/api/v1/trade',trade);
+app.use('/api/v1/profile',profile);
+
+app.get("/secure",async (req, res)=>{
+    res.status(200).json({
+        message: "Auth middleware works"
+    });
+});
+
+
 
 app.listen(PORT, ()=>{
     console.log(`Server listening at PORT: ${PORT}`);

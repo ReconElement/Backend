@@ -8,7 +8,7 @@ import liquidateAssetZod from '../zod-validation/liquidateAssetZod.js';
 import type { Order, tradeObjectType, TradeRecievedType, responseArrayOfActiveTradeType } from '../types.js';
 import {assets} from '../seed/asset.js';
 import type { ExistingTrade } from '../../generated/prisma/browser.js';
-import { existsSync } from 'node:fs';
+// import { existsSync } from 'node:fs';
 const trade = express.Router();
 
 trade.post("/create", async (req: express.Request, res: express.Response)=>{
@@ -253,7 +253,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             }
         });
         console.log(existingTrade);
-        if(existingTrade && existingTrade.liquidated===false){
+        if(existingTrade && !existingTrade.liquidated){
             //quantity check
             if(existingTrade.quantity<quantity){
                 res.status(400).json({
@@ -289,6 +289,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                         break;
                     case "SOL":
                         order.asset = "SOL";
+                        break;
                 }
             }
             order.type = existingTrade.type;
@@ -315,7 +316,7 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
                     setTimeout(async () => {
                         let val = await acknowledgement(sendOverStream) as tradeObjectType;
                         const parsed = tradeValidationZod.safeParse(val);
-                        if (parsed.success === true) {
+                        if (parsed.success) {
                             const data = val[0].messages?.[0]?.message.data;
                             if (data) {
                                 const id = JSON.parse(data).recieved;
@@ -422,6 +423,6 @@ trade.post("/liquidate-asset", async (req: express.Request, res: express.Respons
             message: "Internal Server Error"
         })
     }
-})
+});
 
 export default trade;

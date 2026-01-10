@@ -4,6 +4,7 @@ const auth = async (req: express.Request, res: express.Response, next: express.N
     const cookies = req.cookies;
     const token = cookies["JWT_bearer"];
     if(!token){
+        // console.log("Unauthorized access");
         res.status(401).json({
             message: "Unauthorized, access denied"
         });
