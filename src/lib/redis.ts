@@ -10,7 +10,7 @@ try{
 }catch(e){
     console.log(`Error occurred while connecting to redis client: ${e}`);
     //since it's a fatal error for this backend
-    process.exit(1);
+    // process.exit(1);
 }
 export default redisClient;
 

@@ -1,0 +1,13 @@
+#git
+.git 
+.gitignore
+
+#ignore node modules as well
+node_modules
+
+#ignore environment variables 
+.env
+
+#ide files
+.vscode/
+.idea/
